@@ -1,0 +1,17 @@
+# ============================================================
+# ROOT - Biblioteca Digital / Logia Almirante Howard Nº67
+# ============================================================
+
+# Variables de entorno - NUNCA subir
+.env
+.env.local
+.env.*.local
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp
