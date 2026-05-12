@@ -13,8 +13,10 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "../../hooks/useTheme";
 import { useAuthStore } from "../../store/auth.store";
+import { useThemeStore } from "../../store/theme.store";
 import { supabase } from "../../services/supabase";
 import type { AdminStackParamList } from "../../types";
+import type { ThemeMode } from "../../types";
 
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 
@@ -23,6 +25,13 @@ export function DashboardScreen() {
   const { theme }  = useTheme();
   const { colors, spacing, typography, borderRadius, shadows } = theme;
   const { user, signOut } = useAuthStore();
+  const { mode, setMode } = useThemeStore();
+
+  const themeOptions: { label: string; value: ThemeMode; emoji: string }[] = [
+    { label: "Claro",   value: "light",  emoji: "☀️" },
+    { label: "Oscuro",  value: "dark",   emoji: "🌙" },
+    { label: "Sistema", value: "system", emoji: "📱" },
+  ];
 
   function handleSignOut() {
     Alert.alert("Cerrar sesión", "¿Estás seguro?", [
@@ -136,6 +145,28 @@ export function DashboardScreen() {
       <Text style={{ fontSize: typography.fontSizes.xxl, fontWeight: typography.fontWeights.bold, color: colors.textPrimary, marginBottom: spacing.xl }}>
         Panel Admin
       </Text>
+
+      {/* Selector de tema */}
+      <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.xl }}>
+        {themeOptions.map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            onPress={() => setMode(opt.value)}
+            style={{
+              flex: 1, alignItems: "center", padding: spacing.sm,
+              borderRadius: borderRadius.lg,
+              backgroundColor: mode === opt.value ? colors.primaryLight : colors.surface,
+              borderWidth: 1.5,
+              borderColor: mode === opt.value ? colors.primary : "transparent",
+            }}
+          >
+            <Text style={{ fontSize: 20, marginBottom: 2 }}>{opt.emoji}</Text>
+            <Text style={{ fontSize: typography.fontSizes.xs, fontWeight: typography.fontWeights.medium, color: mode === opt.value ? colors.primary : colors.textSecondary }}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {/* Stats */}
       {isLoading ? (

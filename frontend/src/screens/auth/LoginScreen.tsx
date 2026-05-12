@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Alert, Image } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -10,7 +10,6 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { MasonicLogo } from "../../components/ui/MasonicLogo";
 import type { AuthStackParamList } from "../../types";
-
 type Nav = NativeStackNavigationProp<AuthStackParamList, "Login">;
 
 export function LoginScreen() {
@@ -58,16 +57,20 @@ export function LoginScreen() {
       extraScrollHeight={20}
       showsVerticalScrollIndicator={false}
     >
-      {/* Logo masónico */}
+      {/* Logo de la Logia */}
       <View style={{ alignItems: "center", marginBottom: spacing.xxl }}>
-        <MasonicLogo size={120} color="#C9A84C" showText />
-        <Text style={{
-          fontSize: typography.fontSizes.xs,
-          color: colors.textTertiary,
-          marginTop: spacing.sm,
-          letterSpacing: 2,
-          textTransform: "uppercase",
-        }}>
+        <Image
+          source={require("../../../assets/icon.png")}
+          style={{ width: 140, height: 140, borderRadius: 70, marginBottom: spacing.md }}
+          resizeMode="contain"
+        />
+        <Text style={{ fontSize: typography.fontSizes.lg, fontWeight: typography.fontWeights.bold, color: colors.textPrimary, letterSpacing: 1 }}>
+          Logia Enrique Howard
+        </Text>
+        <Text style={{ fontSize: typography.fontSizes.sm, color: colors.textSecondary, letterSpacing: 2 }}>
+          Nº 67 · Jujuy
+        </Text>
+        <Text style={{ fontSize: typography.fontSizes.xs, color: colors.textTertiary, marginTop: spacing.xs, letterSpacing: 1 }}>
           Biblioteca Digital
         </Text>
       </View>

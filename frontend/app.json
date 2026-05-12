@@ -1,26 +1,24 @@
 {
   "expo": {
-    "name": "Logia A. Howard Nº67",
+    "name": "Logia E. Howard Nº67",
     "slug": "biblioteca-digital",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6366F1"
+      "backgroundColor": "#0A2744"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tuempresa.biblioteca",
+      "bundleIdentifier": "com.logiahoward.biblioteca",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio"],
         "NSPhotoLibraryUsageDescription": "Para seleccionar portadas de libros",
         "NSDocumentsFolderUsageDescription": "Para acceder a archivos de libros"
       }
@@ -28,9 +26,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6366F1"
+        "backgroundColor": "#0A2744"
       },
-      "package": "com.tuempresa.biblioteca",
+      "package": "com.logiahoward.biblioteca",
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -49,12 +47,6 @@
         "expo-image-picker",
         {
           "photosPermission": "Para seleccionar portadas de libros"
-        }
-      ],
-      [
-        "expo-av",
-        {
-          "microphonePermission": false
         }
       ]
     ],
