@@ -144,6 +144,8 @@ export function useUploadBook() {
   return useMutation({
     mutationFn: (payload: UploadBookPayload) => booksService.uploadBook(payload),
     onSuccess: (book) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "books"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
       queryClient.invalidateQueries({ queryKey: bookKeys.bySection(book.sectionId) });
       queryClient.invalidateQueries({ queryKey: bookKeys.recent });
     },

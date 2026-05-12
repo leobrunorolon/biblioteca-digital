@@ -56,6 +56,7 @@ export function ManageBooksScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "books"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
       queryClient.invalidateQueries({ queryKey: ["books"] });
     },
     onError: (e: any) => Alert.alert("Error", e.message),

@@ -1,6 +1,14 @@
 import { supabase } from "./supabase";
-import * as FileSystem from "expo-file-system";
 import type { Book, BookWithProgress, UploadBookPayload, PaginatedResponse } from "../types";
+
+// Generar UUID compatible con React Native (sin crypto nativo)
+function generateUUID(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 export const booksService = {
   // ── Listar libros por sección ──────────────────────────────
@@ -147,43 +155,30 @@ export const booksService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("No autenticado");
 
-    const bookId = crypto.randomUUID();
+    const bookId = generateUUID();
 
     // Subir portada
     let coverUrl: string | undefined;
     if (payload.coverFile) {
-      const coverPath = `${payload.sectionId}/${bookId}/cover.${payload.coverFile.name.split(".").pop()}`;
-      const coverBlob = await uriToBlob(payload.coverFile.uri);
-      const { error: coverError } = await supabase.storage
-        .from("covers")
-        .upload(coverPath, coverBlob, { contentType: payload.coverFile.type });
-      if (coverError) throw coverError;
-
+      const coverExt  = payload.coverFile.name.split(".").pop();
+      const coverPath = `${payload.sectionId}/${bookId}/cover.${coverExt}`;
+      await uploadFileToStorage("covers", coverPath, payload.coverFile.uri, payload.coverFile.type);
       const { data: { publicUrl } } = supabase.storage.from("covers").getPublicUrl(coverPath);
       coverUrl = publicUrl;
     }
 
     // Subir archivo del libro
-    const bookExt = payload.bookFile.name.split(".").pop();
+    const bookExt  = payload.bookFile.name.split(".").pop();
     const bookPath = `${payload.sectionId}/${bookId}/book.${bookExt}`;
-    const bookBlob = await uriToBlob(payload.bookFile.uri);
-    const { error: bookError } = await supabase.storage
-      .from("books")
-      .upload(bookPath, bookBlob, { contentType: payload.bookFile.type });
-    if (bookError) throw bookError;
-
+    await uploadFileToStorage("books", bookPath, payload.bookFile.uri, payload.bookFile.type);
     const fileUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/books/${bookPath}`;
 
     // Subir audio si existe
     let audioUrl: string | undefined;
     if (payload.audioFile) {
-      const audioExt = payload.audioFile.name.split(".").pop();
+      const audioExt  = payload.audioFile.name.split(".").pop();
       const audioPath = `${payload.sectionId}/${bookId}/audio.${audioExt}`;
-      const audioBlob = await uriToBlob(payload.audioFile.uri);
-      const { error: audioError } = await supabase.storage
-        .from("audiobooks")
-        .upload(audioPath, audioBlob, { contentType: payload.audioFile.type });
-      if (audioError) throw audioError;
+      await uploadFileToStorage("audiobooks", audioPath, payload.audioFile.uri, payload.audioFile.type);
       audioUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/audiobooks/${audioPath}`;
     }
 
@@ -214,9 +209,47 @@ export const booksService = {
 
 // ── Helpers ────────────────────────────────────────────────
 
-async function uriToBlob(uri: string): Promise<Blob> {
-  const response = await fetch(uri);
-  return response.blob();
+/**
+ * Sube un archivo local a Supabase Storage usando XMLHttpRequest
+ * que sí soporta URIs locales de Android (content:// y file://)
+ */
+async function uploadFileToStorage(
+  bucket: string,
+  path: string,
+  uri: string,
+  contentType: string
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+  const anonKey    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+  const uploadUrl  = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadUrl);
+    xhr.setRequestHeader("Authorization", `Bearer ${session?.access_token ?? anonKey}`);
+    xhr.setRequestHeader("x-upsert", "true");
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = (e) => reject(new Error(`Network error: ${JSON.stringify(e)}`));
+    xhr.ontimeout = () => reject(new Error("Upload timeout"));
+    xhr.timeout = 120000; // 2 minutos
+
+    const formData = new FormData();
+    formData.append("", {
+      uri,
+      name: path.split("/").pop() ?? "file",
+      type: contentType,
+    } as any);
+
+    xhr.send(formData);
+  });
 }
 
 function mapBook(data: any): Book {

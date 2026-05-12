@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import * as Speech from "expo-speech";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native-stack";
@@ -16,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../hooks/useTheme";
 import { useBook, useUpdateProgress, useAddBookmark } from "../../hooks/useBooks";
 import { useReaderStore } from "../../store/reader.store";
+import { supabase } from "../../services/supabase";
 import type { MainStackParamList } from "../../types";
 
 type Route = RouteProp<MainStackParamList, "Reader">;
@@ -47,6 +49,8 @@ export function ReaderScreen() {
   const scrollY    = useRef(0); // posición actual del scroll
 
   const [content, setContent]           = useState<string>("");
+  const [pdfUrl, setPdfUrl]             = useState<string>("");
+  const [pageText, setPageText]         = useState<string>("");
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -63,12 +67,42 @@ export function ReaderScreen() {
     setLoading(true);
     setError("");
 
-    fetch(book.fileUrl)
-      .then((res) => {
+    async function loadContent() {
+      try {
+        const format = book!.format;
+
+        // PDF → obtener URL pública para Google Docs Viewer
+        if (format === "pdf") {
+          let pdfUrl = book!.fileUrl;
+          // Convertir URL privada a pública
+          if (pdfUrl.includes("/storage/v1/object/books/")) {
+            pdfUrl = pdfUrl.replace(
+              "/storage/v1/object/books/",
+              "/storage/v1/object/public/books/"
+            );
+          }
+          setPdfUrl(pdfUrl);
+          setLoading(false);
+          return;
+        }
+
+        // TXT / EPUB → obtener URL firmada y cargar texto
+        let urlToFetch = book!.fileUrl;
+        if (urlToFetch.includes("/storage/v1/object/books/")) {
+          const pathMatch = urlToFetch.match(/\/storage\/v1\/object\/books\/(.+)/);
+          if (pathMatch) {
+            const { data, error } = await supabase.storage
+              .from("books")
+              .createSignedUrl(pathMatch[1], 3600);
+            if (error) throw error;
+            urlToFetch = data.signedUrl;
+          }
+        }
+
+        const res = await fetch(urlToFetch);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then((text) => {
+        const text = await res.text();
+
         if (text.trim().startsWith("<")) {
           const cleaned = text
             .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -86,11 +120,13 @@ export function ReaderScreen() {
           setContent(text);
         }
         setLoading(false);
-      })
-      .catch(() => {
+      } catch (err) {
         setError("No se pudo cargar el libro. Verificá tu conexión.");
         setLoading(false);
-      });
+      }
+    }
+
+    loadContent();
   }, [book?.fileUrl]);
 
   // ── Retomar posición guardada cuando el contenido carga ──
@@ -164,14 +200,17 @@ export function ReaderScreen() {
       setIsSpeaking(false);
       return;
     }
-    if (!content) {
-      Alert.alert("Sin contenido", "Esperá a que el libro termine de cargar");
+    // Para PDF usa el texto extraído, para TXT usa el contenido directo
+    const textToRead = pdfUrl ? pageText : content;
+    if (!textToRead) {
+      Alert.alert("Sin contenido", pdfUrl
+        ? "El PDF todavía está extrayendo el texto, esperá unos segundos"
+        : "Esperá a que el libro termine de cargar"
+      );
       return;
     }
-    // Leer desde el inicio o desde donde está (primeros 4000 chars por limitación del TTS)
-    const textToRead = content.substring(0, 4000);
     setIsSpeaking(true);
-    Speech.speak(textToRead, {
+    Speech.speak(textToRead.substring(0, 4000), {
       language: "es-ES",
       rate: 0.85,
       pitch: 1.0,
@@ -224,7 +263,6 @@ export function ReaderScreen() {
           >
             <Text style={{ fontSize: 22 }}>{isSpeaking ? "⏹️" : "🔊"}</Text>
           </TouchableOpacity>
-
           <TouchableOpacity onPress={handleBookmark} style={{ padding: 8, marginRight: 4 }}>
             <Text style={{ fontSize: 22 }}>🔖</Text>
           </TouchableOpacity>
@@ -247,33 +285,190 @@ export function ReaderScreen() {
           <Text style={{ fontSize: 48, marginBottom: spacing.md }}>😕</Text>
           <Text style={{ color: rt.text, fontSize: typography.fontSizes.base, textAlign: "center" }}>{error}</Text>
         </View>
+      ) : pdfUrl ? (
+        // PDF → Mozilla PDF.js viewer (funciona offline y con cualquier URL)
+        <WebView
+          source={{
+            html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: ${rt.bg}; display: flex; flex-direction: column; height: 100vh; }
+    #toolbar {
+      background: #1f2937;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: white;
+      font-family: sans-serif;
+      font-size: 13px;
+    }
+    button {
+      background: #374151;
+      color: white;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #page-info { flex: 1; text-align: center; }
+    #pdf-container {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px;
+      gap: 12px;
+    }
+    canvas {
+      max-width: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      background: white;
+    }
+    #loading {
+      color: ${rt.text};
+      font-family: sans-serif;
+      font-size: 16px;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button onclick="prevPage()">◀</button>
+    <span id="page-info">Cargando...</span>
+    <button onclick="nextPage()">▶</button>
+    <button onclick="zoomOut()">−</button>
+    <button onclick="zoomIn()">+</button>
+  </div>
+  <div id="pdf-container">
+    <div id="loading">Cargando PDF...</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let scale = 1.4;
+    const container = document.getElementById('pdf-container');
+
+    async function renderPage(num) {
+      const page = await pdfDoc.getPage(num);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      return canvas;
+    }
+
+    async function loadPDF() {
+      try {
+        pdfDoc = await pdfjsLib.getDocument('${pdfUrl}').promise;
+        document.getElementById('loading').remove();
+        updateInfo();
+        const canvas = await renderPage(currentPage);
+        container.appendChild(canvas);
+
+        // Extraer texto de todas las páginas para TTS
+        let fullText = '';
+        for (let i = 1; i <= Math.min(pdfDoc.numPages, 20); i++) {
+          const page = await pdfDoc.getPage(i);
+          const textContent = await page.getTextContent();
+          fullText += textContent.items.map(item => item.str).join(' ') + '\\n';
+        }
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+          JSON.stringify({ type: 'text', value: fullText.substring(0, 5000) })
+        );
+      } catch(e) {
+        document.getElementById('loading').textContent = 'Error al cargar el PDF: ' + e.message;
+      }
+    }
+
+    function updateInfo() {
+      document.getElementById('page-info').textContent =
+        'Página ' + currentPage + ' / ' + pdfDoc.numPages;
+    }
+
+    async function prevPage() {
+      if (currentPage <= 1) return;
+      currentPage--;
+      container.innerHTML = '';
+      updateInfo();
+      container.appendChild(await renderPage(currentPage));
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+        JSON.stringify({ type: 'progress', value: Math.round((currentPage / pdfDoc.numPages) * 100) })
+      );
+    }
+
+    async function nextPage() {
+      if (currentPage >= pdfDoc.numPages) return;
+      currentPage++;
+      container.innerHTML = '';
+      updateInfo();
+      container.appendChild(await renderPage(currentPage));
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+        JSON.stringify({ type: 'progress', value: Math.round((currentPage / pdfDoc.numPages) * 100) })
+      );
+    }
+
+    function zoomIn()  { scale = Math.min(scale + 0.2, 3.0); container.innerHTML = ''; renderPage(currentPage).then(c => container.appendChild(c)); }
+    function zoomOut() { scale = Math.max(scale - 0.2, 0.6); container.innerHTML = ''; renderPage(currentPage).then(c => container.appendChild(c)); }
+
+    loadPDF();
+  </script>
+</body>
+</html>`,
+          }}
+          style={{ flex: 1, backgroundColor: rt.bg }}
+          onMessage={(event) => {
+            try {
+              const msg = JSON.parse(event.nativeEvent.data);
+              if (msg.type === "progress") setProgress(msg.value);
+              if (msg.type === "text" && msg.value) setPageText(msg.value);
+            } catch {}
+          }}
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={["*"]}
+        />
       ) : (
-          <ScrollView
-            ref={scrollRef}
-            onScroll={handleScroll}
-            scrollEventThrottle={100}
-            onContentSizeChange={(_, h) => setContentHeight(h)}
-            onLayout={(e) => setViewHeight(e.nativeEvent.layout.height)}
-            contentContainerStyle={{
-              padding: 28,
-              paddingBottom: 80,
-              maxWidth: 720,
-              alignSelf: "center",
-              width: "100%",
+        // TXT/EPUB → ScrollView con texto
+        <ScrollView
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
+          onContentSizeChange={(_, h) => setContentHeight(h)}
+          onLayout={(e) => setViewHeight(e.nativeEvent.layout.height)}
+          contentContainerStyle={{
+            padding: 28,
+            paddingBottom: 80,
+            maxWidth: 720,
+            alignSelf: "center",
+            width: "100%",
+          }}
+        >
+          <Text
+            style={{
+              color: rt.text,
+              fontSize: settings.fontSize,
+              lineHeight: settings.fontSize * settings.lineHeight,
+              fontFamily: settings.fontFamily,
             }}
+            selectable
           >
-            <Text
-              style={{
-                color: rt.text,
-                fontSize: settings.fontSize,
-                lineHeight: settings.fontSize * settings.lineHeight,
-                fontFamily: settings.fontFamily,
-              }}
-              selectable
-            >
-              {content}
-            </Text>
-          </ScrollView>
+            {content}
+          </Text>
+        </ScrollView>
       )}
 
       {/* Barra de progreso inferior — siempre visible */}
