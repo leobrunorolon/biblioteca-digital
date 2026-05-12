@@ -19,11 +19,20 @@ import { Input } from "../../components/ui/Input";
 import type { BookFormat } from "../../types";
 
 const FORMATS: { label: string; value: BookFormat; mime: string[] }[] = [
-  { label: "PDF",  value: "pdf",  mime: ["application/pdf"] },
-  { label: "EPUB", value: "epub", mime: ["application/epub+zip"] },
-  { label: "TXT",  value: "txt",  mime: ["text/plain"] },
-  { label: "MP3",  value: "mp3",  mime: ["audio/mpeg"] },
-  { label: "M4B",  value: "m4b",  mime: ["audio/mp4", "audio/x-m4b"] },
+  { label: "PDF",   value: "pdf",  mime: ["application/pdf"] },
+  { label: "EPUB",  value: "epub", mime: ["application/epub+zip"] },
+  { label: "Word",  value: "doc",  mime: [
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]},
+  { label: "PPT",   value: "ppt",  mime: [
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ]},
+  { label: "TXT",   value: "txt",  mime: ["text/plain"] },
+  { label: "MP3",   value: "mp3",  mime: ["audio/mpeg", "audio/mp3"] },
+  { label: "M4B",   value: "m4b",  mime: ["audio/mp4", "audio/x-m4b"] },
 ];
 
 export function UploadBookScreen() {
@@ -63,13 +72,40 @@ export function UploadBookScreen() {
   }
 
   async function pickBookFile() {
-    const selectedFormat = FORMATS.find((f) => f.value === format);
     const result = await DocumentPicker.getDocumentAsync({
-      type: selectedFormat?.mime ?? ["*/*"],
+      type: ["*/*"],
       copyToCacheDirectory: true,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
+      const ext = asset.name.split(".").pop()?.toLowerCase() ?? "";
+
+      // Mapa de extensiones a formato
+      const formatMap: Record<string, BookFormat> = {
+        pdf:  "pdf",
+        epub: "epub",
+        txt:  "txt",
+        doc:  "doc",
+        docx: "doc",
+        ppt:  "ppt",
+        pptx: "ppt",
+        mp3:  "mp3",
+        m4b:  "m4b",
+        m4a:  "m4b",
+      };
+
+      const detectedFormat = formatMap[ext];
+
+      if (!detectedFormat) {
+        Alert.alert(
+          "Formato no válido",
+          `El archivo ".${ext}" no es compatible.\n\nFormatos aceptados:\nPDF, EPUB, TXT, Word (doc/docx), PowerPoint (ppt/pptx), MP3, M4B`
+        );
+        return;
+      }
+
+      // Auto-asignar formato detectado
+      setFormat(detectedFormat);
       setBookFile({
         uri: asset.uri,
         name: asset.name,
@@ -215,28 +251,23 @@ export function UploadBookScreen() {
       </ScrollView>
       {errors.section && <Text style={{ color: colors.error, fontSize: typography.fontSizes.xs, marginBottom: spacing.md }}>{errors.section}</Text>}
 
-      {/* Formato */}
-      <Text style={{ fontSize: typography.fontSizes.sm, fontWeight: typography.fontWeights.medium, color: colors.textSecondary, marginBottom: spacing.xs }}>
-        Formato *
-      </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginBottom: spacing.md }}>
-        {FORMATS.map((f) => (
-          <TouchableOpacity
-            key={f.value}
-            onPress={() => setFormat(f.value)}
-            style={{
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              borderRadius: borderRadius.full,
-              backgroundColor: format === f.value ? colors.primary : colors.surface,
-            }}
-          >
-            <Text style={{ color: format === f.value ? colors.textInverse : colors.textSecondary, fontSize: typography.fontSizes.sm, fontWeight: typography.fontWeights.medium }}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Formato — se detecta automáticamente al seleccionar el archivo */}
+      {bookFile && (
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: colors.primaryLight,
+          borderRadius: borderRadius.lg,
+          padding: spacing.sm,
+          marginBottom: spacing.md,
+          gap: spacing.sm,
+        }}>
+          <Text style={{ fontSize: 16 }}>✅</Text>
+          <Text style={{ fontSize: typography.fontSizes.sm, color: colors.primary, fontWeight: "600" }}>
+            Formato detectado: {format.toUpperCase()}
+          </Text>
+        </View>
+      )}
 
       {/* Archivo del libro */}
       <TouchableOpacity
@@ -256,7 +287,7 @@ export function UploadBookScreen() {
         <Text style={{ fontSize: 24, marginRight: spacing.sm }}>📄</Text>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: typography.fontSizes.sm, fontWeight: typography.fontWeights.medium, color: colors.textPrimary }}>
-            {bookFile ? bookFile.name : `Seleccionar archivo ${format.toUpperCase()}`}
+            {bookFile ? bookFile.name : "Seleccionar archivo (PDF, Word, PPT, TXT, MP3...)"}
           </Text>
           {bookFile?.size && (
             <Text style={{ fontSize: typography.fontSizes.xs, color: colors.textSecondary }}>
@@ -264,6 +295,11 @@ export function UploadBookScreen() {
             </Text>
           )}
         </View>
+        {bookFile && (
+          <TouchableOpacity onPress={() => { setBookFile(null); }} style={{ padding: 4 }}>
+            <Text style={{ color: colors.error, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
       {errors.bookFile && <Text style={{ color: colors.error, fontSize: typography.fontSizes.xs, marginBottom: spacing.md }}>{errors.bookFile}</Text>}
 

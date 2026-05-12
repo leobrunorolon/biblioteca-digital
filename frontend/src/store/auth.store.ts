@@ -32,8 +32,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         const profile = await authService.getProfile(session.user.id);
         set({ user: profile, isAuthenticated: true });
       }
-    } catch (error) {
-      console.error("Error initializing auth:", error);
+    } catch (error: any) {
+      // Si el refresh token es inválido, limpiar la sesión
+      if (error?.message?.includes("Refresh Token") || error?.message?.includes("Invalid")) {
+        await supabase.auth.signOut();
+        set({ user: null, isAuthenticated: false });
+      } else {
+        console.error("Error initializing auth:", error);
+      }
     } finally {
       set({ isLoading: false });
     }
@@ -47,8 +53,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         } catch (error) {
           console.error("Error loading profile:", error);
         }
-      } else if (event === "SIGNED_OUT") {
+      } else if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !session) {
         set({ user: null, isAuthenticated: false });
+      } else if (event === "TOKEN_REFRESHED" && session?.user) {
+        // Token renovado exitosamente
+        try {
+          const profile = await authService.getProfile(session.user.id);
+          set({ user: profile, isAuthenticated: true });
+        } catch {}
       }
     });
   },

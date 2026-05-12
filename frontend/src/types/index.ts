@@ -3,7 +3,7 @@
 // ============================================================
 
 export type UserRole = "admin" | "editor" | "reader";
-export type BookFormat = "pdf" | "epub" | "txt" | "mp3" | "m4b";
+export type BookFormat = "pdf" | "epub" | "txt" | "mp3" | "m4b" | "ppt" | "doc";
 export type ThemeMode = "light" | "dark" | "system";
 
 // Niveles de acceso acumulativos

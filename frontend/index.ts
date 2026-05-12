@@ -42,13 +42,6 @@ if (typeof global.atob === "undefined") {
   };
 }
 
-// TextEncoder / TextDecoder polyfill
-if (typeof global.TextEncoder === "undefined") {
-  const { TextEncoder, TextDecoder } = require("@azure/core-util");
-  global.TextEncoder = TextEncoder;
-  global.TextDecoder = TextDecoder;
-}
-
 // ============================================================
 import { registerRootComponent } from "expo";
 import App from "./App";

@@ -71,17 +71,17 @@ export function ReaderScreen() {
       try {
         const format = book!.format;
 
-        // PDF → obtener URL pública para Google Docs Viewer
-        if (format === "pdf") {
-          let pdfUrl = book!.fileUrl;
-          // Convertir URL privada a pública
-          if (pdfUrl.includes("/storage/v1/object/books/")) {
-            pdfUrl = pdfUrl.replace(
+        // PDF / Word / PPT → obtener URL pública para visor
+        // Usar el format de la DB, no la extensión de la URL
+        if (format === "pdf" || format === "doc" || format === "ppt") {
+          let fileUrl = book!.fileUrl;
+          if (fileUrl.includes("/storage/v1/object/books/")) {
+            fileUrl = fileUrl.replace(
               "/storage/v1/object/books/",
               "/storage/v1/object/public/books/"
             );
           }
-          setPdfUrl(pdfUrl);
+          setPdfUrl(fileUrl);
           setLoading(false);
           return;
         }
@@ -286,56 +286,22 @@ export function ReaderScreen() {
           <Text style={{ color: rt.text, fontSize: typography.fontSizes.base, textAlign: "center" }}>{error}</Text>
         </View>
       ) : pdfUrl ? (
-        // PDF → Mozilla PDF.js viewer (funciona offline y con cualquier URL)
+        // PDF / Word / PPT → PDF.js para PDF, Google Docs para Office
         <WebView
           source={{
-            html: `<!DOCTYPE html>
+            html: pdfUrl.toLowerCase().includes(".pdf") ? `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: ${rt.bg}; display: flex; flex-direction: column; height: 100vh; }
-    #toolbar {
-      background: #1f2937;
-      padding: 8px 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: white;
-      font-family: sans-serif;
-      font-size: 13px;
-    }
-    button {
-      background: #374151;
-      color: white;
-      border: none;
-      padding: 4px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
+    body { background: ${rt.bg}; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #toolbar { background: #1f2937; padding: 8px 12px; display: flex; align-items: center; gap: 8px; color: white; font-size: 13px; }
+    button { background: #374151; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
     #page-info { flex: 1; text-align: center; }
-    #pdf-container {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 12px;
-      gap: 12px;
-    }
-    canvas {
-      max-width: 100%;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      background: white;
-    }
-    #loading {
-      color: ${rt.text};
-      font-family: sans-serif;
-      font-size: 16px;
-      margin-top: 40px;
-    }
+    #pdf-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 12px; gap: 12px; }
+    canvas { max-width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); background: white; }
+    #loading { color: ${rt.text}; font-size: 16px; margin-top: 40px; }
   </style>
 </head>
 <body>
@@ -346,88 +312,44 @@ export function ReaderScreen() {
     <button onclick="zoomOut()">−</button>
     <button onclick="zoomIn()">+</button>
   </div>
-  <div id="pdf-container">
-    <div id="loading">Cargando PDF...</div>
-  </div>
-
+  <div id="pdf-container"><div id="loading">Cargando PDF...</div></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    let pdfDoc = null;
-    let currentPage = 1;
-    let scale = 1.4;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    let pdfDoc = null, currentPage = 1, scale = 1.4;
     const container = document.getElementById('pdf-container');
-
     async function renderPage(num) {
       const page = await pdfDoc.getPage(num);
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      canvas.height = viewport.height; canvas.width = viewport.width;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       return canvas;
     }
-
     async function loadPDF() {
       try {
         pdfDoc = await pdfjsLib.getDocument('${pdfUrl}').promise;
         document.getElementById('loading').remove();
         updateInfo();
-        const canvas = await renderPage(currentPage);
-        container.appendChild(canvas);
-
-        // Extraer texto de todas las páginas para TTS
+        container.appendChild(await renderPage(currentPage));
         let fullText = '';
         for (let i = 1; i <= Math.min(pdfDoc.numPages, 20); i++) {
-          const page = await pdfDoc.getPage(i);
-          const textContent = await page.getTextContent();
-          fullText += textContent.items.map(item => item.str).join(' ') + '\\n';
+          const p = await pdfDoc.getPage(i);
+          const tc = await p.getTextContent();
+          fullText += tc.items.map(item => item.str).join(' ') + '\\n';
         }
-        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
-          JSON.stringify({ type: 'text', value: fullText.substring(0, 5000) })
-        );
-      } catch(e) {
-        document.getElementById('loading').textContent = 'Error al cargar el PDF: ' + e.message;
-      }
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'text', value: fullText.substring(0, 5000) }));
+      } catch(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; }
     }
-
-    function updateInfo() {
-      document.getElementById('page-info').textContent =
-        'Página ' + currentPage + ' / ' + pdfDoc.numPages;
-    }
-
-    async function prevPage() {
-      if (currentPage <= 1) return;
-      currentPage--;
-      container.innerHTML = '';
-      updateInfo();
-      container.appendChild(await renderPage(currentPage));
-      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
-        JSON.stringify({ type: 'progress', value: Math.round((currentPage / pdfDoc.numPages) * 100) })
-      );
-    }
-
-    async function nextPage() {
-      if (currentPage >= pdfDoc.numPages) return;
-      currentPage++;
-      container.innerHTML = '';
-      updateInfo();
-      container.appendChild(await renderPage(currentPage));
-      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
-        JSON.stringify({ type: 'progress', value: Math.round((currentPage / pdfDoc.numPages) * 100) })
-      );
-    }
-
-    function zoomIn()  { scale = Math.min(scale + 0.2, 3.0); container.innerHTML = ''; renderPage(currentPage).then(c => container.appendChild(c)); }
-    function zoomOut() { scale = Math.max(scale - 0.2, 0.6); container.innerHTML = ''; renderPage(currentPage).then(c => container.appendChild(c)); }
-
+    function updateInfo() { document.getElementById('page-info').textContent = 'Página ' + currentPage + ' / ' + pdfDoc.numPages; }
+    async function prevPage() { if (currentPage <= 1) return; currentPage--; container.innerHTML = ''; updateInfo(); container.appendChild(await renderPage(currentPage)); window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'progress', value: Math.round((currentPage/pdfDoc.numPages)*100) })); }
+    async function nextPage() { if (currentPage >= pdfDoc.numPages) return; currentPage++; container.innerHTML = ''; updateInfo(); container.appendChild(await renderPage(currentPage)); window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'progress', value: Math.round((currentPage/pdfDoc.numPages)*100) })); }
+    function zoomIn() { scale = Math.min(scale+0.2, 3.0); container.innerHTML=''; renderPage(currentPage).then(c=>container.appendChild(c)); }
+    function zoomOut() { scale = Math.max(scale-0.2, 0.6); container.innerHTML=''; renderPage(currentPage).then(c=>container.appendChild(c)); }
     loadPDF();
   </script>
 </body>
-</html>`,
+</html>` : `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0"><iframe src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}" style="width:100%;height:100vh;border:none"></iframe></body></html>`,
           }}
           style={{ flex: 1, backgroundColor: rt.bg }}
           onMessage={(event) => {

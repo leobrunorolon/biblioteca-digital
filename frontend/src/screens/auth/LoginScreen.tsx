@@ -63,6 +63,7 @@ export function LoginScreen() {
           source={require("../../../assets/icon.png")}
           style={{ width: 140, height: 140, borderRadius: 70, marginBottom: spacing.md }}
           resizeMode="contain"
+          onError={() => {}}
         />
         <Text style={{ fontSize: typography.fontSizes.lg, fontWeight: typography.fontWeights.bold, color: colors.textPrimary, letterSpacing: 1 }}>
           Logia Enrique Howard
