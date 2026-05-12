@@ -10,6 +10,25 @@ function generateUUID(): string {
   });
 }
 
+// base64 decode compatible con Hermes (React Native release)
+// atob no existe en Hermes, usamos esta implementación
+function base64Decode(base64: string): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let result = "";
+  let i = 0;
+  const str = base64.replace(/[^A-Za-z0-9+/]/g, "");
+  while (i < str.length) {
+    const enc1 = chars.indexOf(str[i++]);
+    const enc2 = chars.indexOf(str[i++]);
+    const enc3 = chars.indexOf(str[i++]);
+    const enc4 = chars.indexOf(str[i++]);
+    result += String.fromCharCode((enc1 << 2) | (enc2 >> 4));
+    if (enc3 !== 64) result += String.fromCharCode(((enc2 & 15) << 4) | (enc3 >> 2));
+    if (enc4 !== 64) result += String.fromCharCode(((enc3 & 3) << 6) | enc4);
+  }
+  return result;
+}
+
 export const booksService = {
   // ── Listar libros por sección ──────────────────────────────
   async getBooksBySection(
