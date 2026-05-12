@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.logiahoward.biblioteca",
+      "bundleIdentifier": "com.tuempresa.biblioteca",
       "infoPlist": {
         "UIBackgroundModes": ["audio"],
         "NSPhotoLibraryUsageDescription": "Para seleccionar portadas de libros",
@@ -28,7 +28,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A2744"
       },
-      "package": "com.logiahoward.biblioteca",
+      "package": "com.tuempresa.biblioteca",
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
