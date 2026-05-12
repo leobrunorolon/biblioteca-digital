@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "Logia A. Howard Nº67",
+    "slug": "biblioteca-digital",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6366F1"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tuempresa.biblioteca",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSPhotoLibraryUsageDescription": "Para seleccionar portadas de libros",
+        "NSDocumentsFolderUsageDescription": "Para acceder a archivos de libros"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366F1"
+      },
+      "package": "com.tuempresa.biblioteca",
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Para seleccionar portadas de libros"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9e380ac5-5bb6-4cbc-bd8d-2198581fa680"
+      }
+    },
+    "owner": "almirantehoward67s-organization"
+  }
+}
