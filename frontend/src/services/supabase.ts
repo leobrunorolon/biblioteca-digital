@@ -3,8 +3,8 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "https://jrhdhxyywuaxhtezgfgh.supabase.co";
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_dyxtEdOLKnwkS1s_fr0WGA_OqWJExzR";
 
 // En release, SecureStore puede fallar si el dispositivo no tiene PIN.
 // Usamos AsyncStorage como fallback seguro.
