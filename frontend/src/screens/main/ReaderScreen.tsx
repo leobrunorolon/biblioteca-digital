@@ -58,6 +58,10 @@ export function ReaderScreen() {
   const [isSpeaking, setIsSpeaking]     = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const [viewHeight, setViewHeight]       = useState(0);
+  const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
+  // La voz se lee del store (persiste entre sesiones)
+  const selectedVoice   = settings.voiceIdentifier;
+  const setSelectedVoice = (id: string | undefined) => updateSettings({ voiceIdentifier: id });
 
   const rt = READER_THEMES[settings.theme];
 
@@ -154,6 +158,29 @@ export function ReaderScreen() {
     }, 15000);
     return () => { if (saveTimer.current) clearInterval(saveTimer.current); };
   }, [progress]);
+  // ── Cargar voces disponibles ─────────────────────────────
+  useEffect(() => {
+    Speech.getAvailableVoicesAsync().then((voices) => {
+      const spanishVoices = voices.filter(v =>
+        v.language?.startsWith("es") || v.identifier?.includes("es")
+      );
+      const list = spanishVoices.length > 0 ? spanishVoices : voices.slice(0, 15);
+      setAvailableVoices(list);
+
+      // Solo asignar voz por defecto si el usuario no tiene una guardada
+      if (!settings.voiceIdentifier && list.length > 0) {
+        const maleVoice = list.find(v =>
+          v.identifier?.toLowerCase().includes("male") ||
+          v.name?.toLowerCase().includes("male") ||
+          v.name?.toLowerCase().includes("jorge") ||
+          v.name?.toLowerCase().includes("diego") ||
+          v.name?.toLowerCase().includes("carlos")
+        );
+        if (maleVoice) updateSettings({ voiceIdentifier: maleVoice.identifier });
+      }
+    }).catch(() => {});
+  }, []);
+
   // ── Interceptar botón físico de Android y swipe back ────
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
@@ -214,6 +241,7 @@ export function ReaderScreen() {
       language: "es-ES",
       rate: 0.85,
       pitch: 1.0,
+      voice: selectedVoice,
       onDone:    () => setIsSpeaking(false),
       onError:   () => setIsSpeaking(false),
       onStopped: () => setIsSpeaking(false),
@@ -492,6 +520,52 @@ export function ReaderScreen() {
                 {isSpeaking ? "Detener lectura en voz alta" : "Leer en voz alta"}
               </Text>
             </TouchableOpacity>
+
+            {/* Selector de voz */}
+            {availableVoices.length > 0 && (
+              <View style={{ marginBottom: spacing.md }}>
+                <Text style={{ fontSize: typography.fontSizes.sm, color: colors.textSecondary, marginBottom: spacing.sm, fontWeight: "600" }}>
+                  Voz para lectura en voz alta
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {/* Opción por defecto */}
+                  <TouchableOpacity
+                    onPress={() => setSelectedVoice(undefined)}
+                    style={{
+                      paddingHorizontal: spacing.sm, paddingVertical: 6,
+                      borderRadius: borderRadius.lg,
+                      backgroundColor: !selectedVoice ? colors.primary : colors.surface,
+                      marginRight: spacing.xs, borderWidth: 1,
+                      borderColor: !selectedVoice ? colors.primary : colors.border,
+                    }}
+                  >
+                    <Text style={{ fontSize: typography.fontSizes.xs, color: !selectedVoice ? colors.textInverse : colors.textSecondary, fontWeight: "600" }}>
+                      🔊 Por defecto
+                    </Text>
+                  </TouchableOpacity>
+                  {availableVoices.map((voice) => (
+                    <TouchableOpacity
+                      key={voice.identifier}
+                      onPress={() => setSelectedVoice(voice.identifier)}
+                      style={{
+                        paddingHorizontal: spacing.sm, paddingVertical: 6,
+                        borderRadius: borderRadius.lg,
+                        backgroundColor: selectedVoice === voice.identifier ? colors.primary : colors.surface,
+                        marginRight: spacing.xs, borderWidth: 1,
+                        borderColor: selectedVoice === voice.identifier ? colors.primary : colors.border,
+                      }}
+                    >
+                      <Text style={{ fontSize: typography.fontSizes.xs, color: selectedVoice === voice.identifier ? colors.textInverse : colors.textSecondary, fontWeight: "600" }}>
+                        {voice.name ?? voice.identifier}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <Text style={{ fontSize: 10, color: colors.textTertiary, marginTop: 4 }}>
+                  Para más voces: Ajustes → Accesibilidad → Texto a voz
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity onPress={() => setShowSettings(false)} style={{ padding: spacing.md, alignItems: "center" }}>
               <Text style={{ color: colors.textSecondary, fontSize: typography.fontSizes.base }}>Cerrar</Text>

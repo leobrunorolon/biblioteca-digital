@@ -271,6 +271,7 @@ export interface ReaderSettings {
   lineHeight: number;
   theme: "light" | "dark" | "sepia";
   scrollDirection: "vertical" | "horizontal";
+  voiceIdentifier?: string; // voz TTS preferida
 }
 
 // ============================================================
