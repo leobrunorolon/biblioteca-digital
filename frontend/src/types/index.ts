@@ -258,6 +258,7 @@ export type AdminStackParamList = {
   ManageBooks: { sectionId?: string; sectionName?: string };
   BookPreview: { bookId: string };
   Analytics: undefined;
+  Announcements: undefined;
   Reader: { bookId: string; format: string };
   AudioPlayer: { bookId: string };
 };

@@ -13,6 +13,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useRecentBooks, useContinueReading } from "../../hooks/useBooks";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { BookCard } from "../../components/books/BookCard";
+import { AnnouncementBanner } from "../../components/ui/AnnouncementBanner";
 import type { MainStackParamList } from "../../types";
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -73,6 +74,9 @@ export function HomeScreen() {
           {firstName} 👋
         </Text>
       </View>
+
+      {/* Anuncios */}
+      <AnnouncementBanner />
 
       {/* Continuar leyendo */}
       {continueBooks && continueBooks.length > 0 && (

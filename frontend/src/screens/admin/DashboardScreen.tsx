@@ -73,6 +73,8 @@ export function DashboardScreen() {
     { emoji: "📋", label: "Ver libros",     screen: "ManageBooks"     as const, color: "#10B981" },
     { emoji: "👥", label: "Usuarios",       screen: "ManageUsers"     as const, color: "#8B5CF6" },
     { emoji: "📂", label: "Secciones",      screen: "ManageSections"  as const, color: "#F59E0B" },
+    { emoji: "📢", label: "Anuncios",       screen: "Announcements"   as const, color: "#C9A84C" },
+    { emoji: "📊", label: "Analytics",      screen: "Analytics"       as const, color: "#EF4444" },
   ];
 
   return (

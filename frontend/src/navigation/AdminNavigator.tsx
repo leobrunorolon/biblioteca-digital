@@ -1,12 +1,13 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { DashboardScreen }      from "../screens/admin/DashboardScreen";
-import { UploadBookScreen }     from "../screens/admin/UploadBookScreen";
-import { ManageUsersScreen }    from "../screens/admin/ManageUsersScreen";
-import { ManageSectionsScreen } from "../screens/admin/ManageSectionsScreen";
-import { ManageBooksScreen }    from "../screens/admin/ManageBooksScreen";
-import { BookPreviewScreen }    from "../screens/admin/BookPreviewScreen";
-import { AnalyticsScreen }      from "../screens/admin/AnalyticsScreen";
+import { DashboardScreen }       from "../screens/admin/DashboardScreen";
+import { UploadBookScreen }      from "../screens/admin/UploadBookScreen";
+import { ManageUsersScreen }     from "../screens/admin/ManageUsersScreen";
+import { ManageSectionsScreen }  from "../screens/admin/ManageSectionsScreen";
+import { ManageBooksScreen }     from "../screens/admin/ManageBooksScreen";
+import { BookPreviewScreen }     from "../screens/admin/BookPreviewScreen";
+import { AnalyticsScreen }       from "../screens/admin/AnalyticsScreen";
+import { AnnouncementsScreen }   from "../screens/admin/AnnouncementsScreen";
 import { ReaderScreen }         from "../screens/main/ReaderScreen";
 import { AudioPlayerScreen }    from "../screens/main/AudioPlayerScreen";
 import { useTheme }             from "../hooks/useTheme";
@@ -34,6 +35,7 @@ export function AdminNavigator() {
       <Stack.Screen name="ManageBooks"    component={ManageBooksScreen}    options={({ route }) => ({ title: (route.params as any)?.sectionName ?? "Libros" })} />
       <Stack.Screen name="BookPreview"    component={BookPreviewScreen}    options={{ title: "Detalle del libro" }} />
       <Stack.Screen name="Analytics"      component={AnalyticsScreen}      options={{ title: "Analytics" }} />
+      <Stack.Screen name="Announcements"  component={AnnouncementsScreen}  options={{ title: "Anuncios" }} />
       <Stack.Screen name="Reader"         component={ReaderScreen}         options={{ headerShown: false }} />
       <Stack.Screen name="AudioPlayer"    component={AudioPlayerScreen}    options={{ headerShown: false, presentation: "modal" }} />
     </Stack.Navigator>
