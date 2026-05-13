@@ -44,7 +44,7 @@ export function AnalyticsScreen() {
         : 0;
 
       return {
-        topBooks:       topBooks.data ?? [],
+        topBooks:       deduplicateByBookId(topBooks.data ?? []),
         tierDist:       tierDist.data ?? [],
         recentActivity: recentActivity.data ?? [],
         avgProgress:    avg,
@@ -129,7 +129,7 @@ export function AnalyticsScreen() {
       {(data?.recentActivity ?? []).length > 0 && (
         <Section title="Actividad últimos 7 días" colors={colors} typography={typography} spacing={spacing}>
           {(data?.recentActivity ?? []).slice(0, 8).map((item: any, idx: number) => (
-            <View key={idx} style={{ flexDirection: "row", alignItems: "center", paddingVertical: spacing.xs }}>
+            <View key={`activity-${idx}-${item.created_at}`} style={{ flexDirection: "row", alignItems: "center", paddingVertical: spacing.xs }}>
               <Text style={{ fontSize: 16, marginRight: spacing.sm }}>{getActionEmoji(item.action)}</Text>
               <Text style={{ flex: 1, fontSize: typography.fontSizes.xs, color: colors.textSecondary }}>
                 {getActionLabel(item.action)}
@@ -143,6 +143,15 @@ export function AnalyticsScreen() {
       )}
     </ScrollView>
   );
+}
+
+function deduplicateByBookId(items: any[]): any[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!item.book_id || seen.has(item.book_id)) return false;
+    seen.add(item.book_id);
+    return true;
+  });
 }
 
 function Section({ title, children, colors, typography, spacing }: any) {

@@ -44,22 +44,85 @@ export function RegisterScreen() {
       await signUp(email.trim().toLowerCase(), password, fullName.trim());
       setSuccess(true);
     } catch (error: any) {
-      Alert.alert("Error al registrarse", error.message ?? "Intentá de nuevo.");
+      const msg = error.message ?? "";
+      let userMessage = "Intentá de nuevo.";
+
+      if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("user already exists")) {
+        userMessage = "Ya existe una cuenta con ese email. Intentá iniciar sesión.";
+      } else if (msg.toLowerCase().includes("password")) {
+        userMessage = "La contraseña no cumple los requisitos mínimos.";
+      } else {
+        userMessage = msg || userMessage;
+      }
+
+      Alert.alert("Error al registrarse", userMessage);
     }
   }
 
   if (success) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: spacing.xl }}>
-        <Text style={{ fontSize: 64, marginBottom: spacing.lg }}>📬</Text>
-        <Text style={{ fontSize: typography.fontSizes.xl, fontWeight: typography.fontWeights.bold, color: colors.textPrimary, textAlign: "center", marginBottom: spacing.md }}>
-          ¡Revisá tu email!
+        {/* Ícono de éxito */}
+        <View style={{
+          width: 96, height: 96, borderRadius: 48,
+          backgroundColor: "#10B98120",
+          alignItems: "center", justifyContent: "center",
+          marginBottom: spacing.lg,
+        }}>
+          <Text style={{ fontSize: 52 }}>✅</Text>
+        </View>
+
+        <Text style={{
+          fontSize: typography.fontSizes.xxl,
+          fontWeight: typography.fontWeights.bold,
+          color: colors.textPrimary,
+          textAlign: "center",
+          marginBottom: spacing.sm,
+        }}>
+          ¡Cuenta creada!
         </Text>
-        <Text style={{ fontSize: typography.fontSizes.base, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.xl }}>
-          Te enviamos un link de confirmación a {email}.{"\n"}
-          Una vez confirmado, el administrador te asignará tu nivel de acceso.
+
+        <Text style={{
+          fontSize: typography.fontSizes.base,
+          color: colors.textSecondary,
+          textAlign: "center",
+          marginBottom: spacing.xl,
+        }}>
+          Tu cuenta fue registrada con el email{"\n"}
+          <Text style={{ color: colors.primary, fontWeight: typography.fontWeights.semibold }}>
+            {email}
+          </Text>
         </Text>
-        <Button title="Volver al login" onPress={() => navigation.navigate("Login")} variant="outline" fullWidth />
+
+        {/* Aviso de acceso pendiente */}
+        <View style={{
+          backgroundColor: "#FEF3C7",
+          borderRadius: borderRadius.xl,
+          padding: spacing.lg,
+          marginBottom: spacing.xl,
+          width: "100%",
+          borderLeftWidth: 4,
+          borderLeftColor: "#F59E0B",
+        }}>
+          <Text style={{
+            fontSize: typography.fontSizes.base,
+            fontWeight: typography.fontWeights.bold,
+            color: "#92400E",
+            marginBottom: spacing.xs,
+          }}>
+            ⏳ Acceso pendiente
+          </Text>
+          <Text style={{
+            fontSize: typography.fontSizes.sm,
+            color: "#92400E",
+            lineHeight: 20,
+          }}>
+            Tu cuenta fue creada pero todavía no tenés acceso al contenido.{"\n\n"}
+            Contactá al administrador de la logia para que te habilite los permisos.
+          </Text>
+        </View>
+
+        <Button title="Ir al inicio de sesión" onPress={() => navigation.navigate("Login")} fullWidth size="lg" />
       </View>
     );
   }

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Logia E. Howard Nº67",
+    "name": "Logia Almirante Howard Nº67",
     "slug": "biblioteca-digital",
-    "version": "1.0.1",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

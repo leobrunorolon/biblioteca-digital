@@ -66,13 +66,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signIn: async (email, password) => {
-    set({ isLoading: true });
-    try {
-      await authService.signIn(email, password);
-      // El onAuthStateChange se encarga de actualizar el estado
-    } finally {
-      set({ isLoading: false });
-    }
+    // No tocar isLoading global — el componente maneja su propio loading
+    // para evitar re-renders que limpian los campos
+    await authService.signIn(email, password);
+    // onAuthStateChange se encarga de setear user e isAuthenticated
   },
 
   signUp: async (email, password, fullName) => {

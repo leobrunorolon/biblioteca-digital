@@ -104,6 +104,8 @@ export function SearchScreen() {
           data={books}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           renderItem={({ item }) => (
             <BookCard
               book={item}

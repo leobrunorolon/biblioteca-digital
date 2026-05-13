@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   Modal,
   Alert,
   ScrollView,
+  PanResponder,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Speech from "expo-speech";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type { RouteProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../hooks/useTheme";
 import { useBook, useUpdateProgress, useAddBookmark } from "../../hooks/useBooks";
@@ -46,7 +48,8 @@ export function ReaderScreen() {
   const scrollRef  = useRef<ScrollView>(null);
   const startTime  = useRef(Date.now());
   const saveTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const scrollY    = useRef(0); // posición actual del scroll
+  const scrollY    = useRef(0);
+  const ttsBarWidth = useRef(0); // ancho de la barra de progreso TTS
 
   const [content, setContent]           = useState<string>("");
   const [pdfUrl, setPdfUrl]             = useState<string>("");
@@ -54,14 +57,33 @@ export function ReaderScreen() {
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showTTSBar, setShowTTSBar]     = useState(false);
   const [progress, setProgress]         = useState(0);
-  const [isSpeaking, setIsSpeaking]     = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const [viewHeight, setViewHeight]       = useState(0);
   const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
+
+  // ── TTS state ────────────────────────────────────────────
+  // "idle" | "playing" | "paused"
+  const [ttsState, setTtsState]         = useState<"idle" | "playing" | "paused">("idle");
+  const [ttsSpeed, setTtsSpeed]         = useState(1.0);
+  const [ttsChunkIndex, setTtsChunkIndex] = useState(0);
+  const ttsChunks   = useRef<string[]>([]);
+  const ttsIndexRef = useRef(0);   // ref para acceder dentro de callbacks
+  const ttsStateRef = useRef<"idle" | "playing" | "paused">("idle");
+  const ttsSpeedRef = useRef(1.0);
+
+  const TTS_SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
   // La voz se lee del store (persiste entre sesiones)
   const selectedVoice   = settings.voiceIdentifier;
   const setSelectedVoice = (id: string | undefined) => updateSettings({ voiceIdentifier: id });
+
+  // isSpeaking para compatibilidad con el resto del código
+  const isSpeaking = ttsState === "playing";
+
+  // Clave de storage para guardar posición TTS por libro
+  const TTS_STORAGE_KEY = `@biblioteca/tts-position-${bookId}`;
 
   const rt = READER_THEMES[settings.theme];
 
@@ -184,8 +206,13 @@ export function ReaderScreen() {
   // ── Interceptar botón físico de Android y swipe back ────
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
-      // Guardar progreso antes de salir por cualquier método
+      // Guardar posición TTS y progreso antes de salir
+      if (ttsChunks.current.length > 0) {
+        saveTtsPosition(ttsIndexRef.current, ttsChunks.current);
+      }
       Speech.stop();
+      ttsStateRef.current = "idle";
+      ttsChunks.current = [];
       if (saveTimer.current) clearInterval(saveTimer.current);
       const readSeconds = Math.floor((Date.now() - startTime.current) / 1000);
       if (progress > 0 || readSeconds > 5) {
@@ -219,15 +246,114 @@ export function ReaderScreen() {
     Alert.alert("🔖 Marcador guardado", `Guardado al ${progress}%`);
   }
 
-  // ── Texto a voz ──────────────────────────────────────────
-  async function toggleSpeech() {
-    const speaking = await Speech.isSpeakingAsync();
-    if (speaking) {
-      await Speech.stop();
-      setIsSpeaking(false);
+  // ── PanResponder para barra TTS arrastrable ─────────────
+  const ttsPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: async (evt) => {
+        // Al tocar, saltar a esa posición
+        if (ttsBarWidth.current <= 0 || ttsChunks.current.length === 0) return;
+        const x = evt.nativeEvent.locationX;
+        const pct = Math.max(0, Math.min(1, x / ttsBarWidth.current));
+        const newIndex = Math.round(pct * (ttsChunks.current.length - 1));
+        await Speech.stop();
+        ttsIndexRef.current = newIndex;
+        setTtsChunkIndex(newIndex);
+        if (ttsStateRef.current === "playing") {
+          speakChunk(newIndex);
+        }
+      },
+      onPanResponderMove: async (evt) => {
+        if (ttsBarWidth.current <= 0 || ttsChunks.current.length === 0) return;
+        const x = evt.nativeEvent.locationX;
+        const pct = Math.max(0, Math.min(1, x / ttsBarWidth.current));
+        const newIndex = Math.round(pct * (ttsChunks.current.length - 1));
+        ttsIndexRef.current = newIndex;
+        setTtsChunkIndex(newIndex);
+      },
+      onPanResponderRelease: async () => {
+        await Speech.stop();
+        if (ttsStateRef.current === "playing") {
+          speakChunk(ttsIndexRef.current);
+        }
+      },
+    })
+  ).current;
+
+  // ── Guardar / restaurar posición TTS ────────────────────
+  async function saveTtsPosition(index: number, chunks: string[]) {
+    try {
+      await AsyncStorage.setItem(
+        TTS_STORAGE_KEY,
+        JSON.stringify({ index, total: chunks.length })
+      );
+    } catch {}
+  }
+
+  async function restoreTtsPosition(): Promise<number> {
+    try {
+      const saved = await AsyncStorage.getItem(TTS_STORAGE_KEY);
+      if (saved) {
+        const { index } = JSON.parse(saved);
+        return typeof index === "number" ? index : 0;
+      }
+    } catch {}
+    return 0;
+  }
+
+  // ── TTS: dividir texto en chunks de ~300 palabras ───────
+  function buildChunks(text: string): string[] {
+    // Dividir por oraciones para no cortar palabras
+    const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text];
+    const chunks: string[] = [];
+    let current = "";
+    for (const s of sentences) {
+      if ((current + s).length > 800) {
+        if (current.trim()) chunks.push(current.trim());
+        current = s;
+      } else {
+        current += s;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [text.substring(0, 800)];
+  }
+
+  function speakChunk(index: number) {
+    if (index >= ttsChunks.current.length) {
+      // Terminó todo el texto
+      setTtsState("idle");
+      ttsStateRef.current = "idle";
+      setTtsChunkIndex(0);
+      ttsIndexRef.current = 0;
       return;
     }
-    // Para PDF usa el texto extraído, para TXT usa el contenido directo
+    const chunk = ttsChunks.current[index];
+    setTtsChunkIndex(index);
+    ttsIndexRef.current = index;
+
+    Speech.speak(chunk, {
+      language: "es-ES",
+      rate: ttsSpeedRef.current,
+      pitch: 1.0,
+      voice: selectedVoice,
+      onDone: () => {
+        if (ttsStateRef.current === "playing") {
+          speakChunk(ttsIndexRef.current + 1);
+        }
+      },
+      onError: () => {
+        setTtsState("idle");
+        ttsStateRef.current = "idle";
+      },
+      onStopped: () => {
+        // No hacer nada — puede ser pausa intencional
+      },
+    });
+  }
+
+  async function ttsPlay() {
     const textToRead = pdfUrl ? pageText : content;
     if (!textToRead) {
       Alert.alert("Sin contenido", pdfUrl
@@ -236,17 +362,94 @@ export function ReaderScreen() {
       );
       return;
     }
-    setIsSpeaking(true);
-    Speech.speak(textToRead.substring(0, 4000), {
-      language: "es-ES",
-      rate: 0.85,
-      pitch: 1.0,
-      voice: selectedVoice,
-      onDone:    () => setIsSpeaking(false),
-      onError:   () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-    });
+
+    if (ttsState === "paused") {
+      // Reanudar desde donde quedó
+      setTtsState("playing");
+      ttsStateRef.current = "playing";
+      speakChunk(ttsIndexRef.current);
+      return;
+    }
+
+    // Construir chunks si no existen
+    if (ttsChunks.current.length === 0) {
+      ttsChunks.current = buildChunks(textToRead);
+      // Restaurar posición guardada
+      const savedIndex = await restoreTtsPosition();
+      if (savedIndex > 0 && savedIndex < ttsChunks.current.length) {
+        ttsIndexRef.current = savedIndex;
+        setTtsChunkIndex(savedIndex);
+      }
+    }
+
+    setTtsState("playing");
+    ttsStateRef.current = "playing";
+    setShowTTSBar(true);
+    speakChunk(ttsIndexRef.current);
   }
+
+  async function ttsPause() {
+    await Speech.stop();
+    setTtsState("paused");
+    ttsStateRef.current = "paused";
+    // Guardar posición al pausar
+    await saveTtsPosition(ttsIndexRef.current, ttsChunks.current);
+  }
+
+  async function ttsStop() {
+    await Speech.stop();
+    // Guardar posición antes de limpiar
+    await saveTtsPosition(ttsIndexRef.current, ttsChunks.current);
+    setTtsState("idle");
+    ttsStateRef.current = "idle";
+    setTtsChunkIndex(0);
+    ttsIndexRef.current = 0;
+    ttsChunks.current = [];
+    setShowTTSBar(false);
+  }
+
+  async function ttsSkipBack() {
+    await Speech.stop();
+    const newIndex = Math.max(0, ttsIndexRef.current - 3);
+    ttsIndexRef.current = newIndex;
+    setTtsChunkIndex(newIndex);
+    if (ttsStateRef.current === "playing") {
+      speakChunk(newIndex);
+    }
+  }
+
+  async function ttsSkipForward() {
+    await Speech.stop();
+    const newIndex = Math.min(ttsChunks.current.length - 1, ttsIndexRef.current + 3);
+    ttsIndexRef.current = newIndex;
+    setTtsChunkIndex(newIndex);
+    if (ttsStateRef.current === "playing") {
+      speakChunk(newIndex);
+    }
+  }
+
+  async function ttsSetSpeed(speed: number) {
+    ttsSpeedRef.current = speed;
+    setTtsSpeed(speed);
+    // Si está reproduciendo, reiniciar el chunk actual con la nueva velocidad
+    if (ttsStateRef.current === "playing") {
+      await Speech.stop();
+      speakChunk(ttsIndexRef.current);
+    }
+  }
+
+  // Mantener compatibilidad con el botón de la barra superior
+  async function toggleSpeech() {
+    if (ttsState === "playing") {
+      await ttsPause();
+    } else {
+      await ttsPlay();
+    }
+  }
+
+  const ttsProgress = ttsChunks.current.length > 0
+    ? Math.round((ttsChunkIndex / ttsChunks.current.length) * 100)
+    : 0;
 
   // ── Render ───────────────────────────────────────────────
   return (
@@ -289,7 +492,9 @@ export function ReaderScreen() {
               borderRadius: borderRadius.md,
             }}
           >
-            <Text style={{ fontSize: 22 }}>{isSpeaking ? "⏹️" : "🔊"}</Text>
+            <Text style={{ fontSize: 22 }}>
+              {ttsState === "playing" ? "⏸️" : ttsState === "paused" ? "▶️" : "🔊"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleBookmark} style={{ padding: 8, marginRight: 4 }}>
             <Text style={{ fontSize: 22 }}>🔖</Text>
@@ -358,15 +563,18 @@ export function ReaderScreen() {
       try {
         pdfDoc = await pdfjsLib.getDocument('${pdfUrl}').promise;
         document.getElementById('loading').remove();
+        // Retomar desde la página guardada
+        const savedPage = ${book?.progress?.progressPercent ? `Math.max(1, Math.round((${book.progress.progressPercent} / 100) * pdfDoc.numPages))` : '1'};
+        currentPage = Math.min(savedPage, pdfDoc.numPages);
         updateInfo();
         container.appendChild(await renderPage(currentPage));
         let fullText = '';
-        for (let i = 1; i <= Math.min(pdfDoc.numPages, 20); i++) {
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
           const p = await pdfDoc.getPage(i);
           const tc = await p.getTextContent();
           fullText += tc.items.map(item => item.str).join(' ') + '\\n';
         }
-        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'text', value: fullText.substring(0, 5000) }));
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'text', value: fullText.substring(0, 50000) }));
       } catch(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; }
     }
     function updateInfo() { document.getElementById('page-info').textContent = 'Página ' + currentPage + ' / ' + pdfDoc.numPages; }
@@ -421,6 +629,105 @@ export function ReaderScreen() {
         </ScrollView>
       )}
 
+      {/* Barra TTS flotante — visible cuando TTS está activo */}
+      {showTTSBar && ttsState !== "idle" && (
+        <View style={{
+          backgroundColor: settings.theme === "dark" ? "#1f2937" : "#1a1a2e",
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          borderTopWidth: 1,
+          borderTopColor: colors.primary + "40",
+        }}>
+          {/* Progreso TTS arrastrable */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20, gap: spacing.xs }}>
+            <Text style={{ fontSize: 10, color: colors.primary, fontWeight: "700", minWidth: 28 }}>
+              {ttsProgress}%
+            </Text>
+            <View
+              style={{ flex: 1, height: 18, justifyContent: "center" }}
+              onLayout={(e) => { ttsBarWidth.current = e.nativeEvent.layout.width; }}
+              {...ttsPanResponder.panHandlers}
+            >
+              <View style={{ height: 6, backgroundColor: "#374151", borderRadius: 3 }}>
+                <View style={{ width: `${ttsProgress}%`, height: "100%", backgroundColor: colors.primary, borderRadius: 3 }} />
+              </View>
+              {/* Thumb arrastrable */}
+              <View style={{
+                position: "absolute",
+                left: `${ttsProgress}%`,
+                width: 16, height: 16,
+                borderRadius: 8,
+                backgroundColor: colors.primary,
+                marginLeft: -8,
+                top: 1,
+                shadowColor: "#000",
+                shadowOpacity: 0.3,
+                shadowRadius: 3,
+                elevation: 3,
+              }} />
+            </View>
+            <Text style={{ fontSize: 10, color: "#9CA3AF", minWidth: 40, textAlign: "right" }}>
+              {ttsChunkIndex + 1}/{ttsChunks.current.length}
+            </Text>
+          </View>
+
+          {/* Controles */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+
+            {/* Velocidad */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxWidth: 160 }}>
+              <View style={{ flexDirection: "row", gap: 4 }}>
+                {TTS_SPEEDS.map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    onPress={() => ttsSetSpeed(s)}
+                    style={{
+                      paddingHorizontal: 8, paddingVertical: 4,
+                      borderRadius: 6,
+                      backgroundColor: ttsSpeed === s ? colors.primary : "#374151",
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, color: ttsSpeed === s ? "#fff" : "#9CA3AF", fontWeight: "700" }}>
+                      {s}x
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Controles de reproducción */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              {/* Retroceder */}
+              <TouchableOpacity onPress={ttsSkipBack} style={{ padding: 6 }}>
+                <Text style={{ fontSize: 22 }}>⏮️</Text>
+              </TouchableOpacity>
+
+              {/* Play / Pausa */}
+              <TouchableOpacity
+                onPress={ttsState === "playing" ? ttsPause : ttsPlay}
+                style={{
+                  width: 44, height: 44, borderRadius: 22,
+                  backgroundColor: colors.primary,
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 20 }}>{ttsState === "playing" ? "⏸" : "▶️"}</Text>
+              </TouchableOpacity>
+
+              {/* Avanzar */}
+              <TouchableOpacity onPress={ttsSkipForward} style={{ padding: 6 }}>
+                <Text style={{ fontSize: 22 }}>⏭️</Text>
+              </TouchableOpacity>
+
+              {/* Stop */}
+              <TouchableOpacity onPress={ttsStop} style={{ padding: 6 }}>
+                <Text style={{ fontSize: 22 }}>⏹️</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Barra de progreso inferior — siempre visible */}
       {!loading && !error && (
         <View style={{
@@ -433,7 +740,7 @@ export function ReaderScreen() {
         }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
             <Text style={{ fontSize: 12, color: settings.theme === "dark" ? "#9CA3AF" : "#6B7280" }}>
-              {isSpeaking ? "🔊 Leyendo en voz alta..." : (book?.title ?? "")}
+              {ttsState === "playing" ? "🔊 Leyendo..." : ttsState === "paused" ? "⏸️ Pausado" : (book?.title ?? "")}
             </Text>
             <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "700" }}>{progress}%</Text>
           </View>
@@ -507,17 +814,19 @@ export function ReaderScreen() {
 
             {/* TTS */}
             <TouchableOpacity
-              onPress={() => { setShowSettings(false); setTimeout(toggleSpeech, 300); }}
+              onPress={() => { setShowSettings(false); setTimeout(ttsState === "playing" ? ttsPause : ttsPlay, 300); }}
               style={{
                 flexDirection: "row", alignItems: "center", justifyContent: "center",
-                backgroundColor: isSpeaking ? colors.error : colors.primary,
+                backgroundColor: ttsState === "playing" ? colors.error : colors.primary,
                 padding: spacing.md, borderRadius: borderRadius.xl,
                 marginBottom: spacing.sm, gap: spacing.sm,
               }}
             >
-              <Text style={{ fontSize: 20 }}>{isSpeaking ? "⏹️" : "🔊"}</Text>
+              <Text style={{ fontSize: 20 }}>
+                {ttsState === "playing" ? "⏸️" : ttsState === "paused" ? "▶️" : "🔊"}
+              </Text>
               <Text style={{ color: colors.textInverse, fontWeight: "700", fontSize: typography.fontSizes.base }}>
-                {isSpeaking ? "Detener lectura en voz alta" : "Leer en voz alta"}
+                {ttsState === "playing" ? "Pausar lectura" : ttsState === "paused" ? "Reanudar lectura" : "Leer en voz alta"}
               </Text>
             </TouchableOpacity>
 

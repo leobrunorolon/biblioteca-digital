@@ -7,7 +7,8 @@ import {
   RefreshControl,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type { NativeStackNavigationProp, RouteProp } from "@react-navigation/native-stack";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import { useTheme } from "../../hooks/useTheme";
 import { useBooksBySection } from "../../hooks/useBooks";
 import { BookCard } from "../../components/books/BookCard";

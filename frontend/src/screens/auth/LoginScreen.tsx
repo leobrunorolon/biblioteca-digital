@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Alert, Image } from "react-native";
+import { View, Text, TouchableOpacity, Image } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,15 +13,17 @@ import type { AuthStackParamList } from "../../types";
 type Nav = NativeStackNavigationProp<AuthStackParamList, "Login">;
 
 export function LoginScreen() {
-  const navigation            = useNavigation<Nav>();
-  const { signIn, isLoading } = useAuthStore();
-  const { theme }             = useTheme();
+  const navigation  = useNavigation<Nav>();
+  const { signIn }  = useAuthStore();
+  const { theme }   = useTheme();
   const { colors, spacing, typography } = theme;
-  const insets                = useSafeAreaInsets();
+  const insets      = useSafeAreaInsets();
 
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [errors, setErrors]     = useState<{ email?: string; password?: string }>({});
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [errors, setErrors]         = useState<{ email?: string; password?: string }>({});
+  const [loginError, setLoginError] = useState("");
+  const [loading, setLoading]       = useState(false);
 
   function validate(): boolean {
     const e: typeof errors = {};
@@ -35,10 +37,25 @@ export function LoginScreen() {
 
   async function handleLogin() {
     if (!validate()) return;
+    setLoginError("");
+    setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
+      // Si llega acá sin error, onAuthStateChange navega automáticamente
     } catch (error: any) {
-      Alert.alert("Error al iniciar sesión", error.message ?? "Verificá tus credenciales e intentá de nuevo.");
+      const msg = error.message ?? "";
+      let userMessage = "Verificá tus credenciales e intentá de nuevo.";
+
+      if (msg.toLowerCase().includes("email not confirmed")) {
+        userMessage = "Tu email aún no fue confirmado. Contactá al administrador.";
+      } else if (msg.toLowerCase().includes("invalid login credentials") || msg.toLowerCase().includes("invalid credentials")) {
+        userMessage = "Email o contraseña incorrectos.";
+      } else if (msg.toLowerCase().includes("too many requests")) {
+        userMessage = "Demasiados intentos. Esperá unos minutos.";
+      }
+
+      setLoginError(userMessage);
+      setLoading(false); // solo apagar loading si falló — si tuvo éxito navega y el componente se desmonta
     }
   }
 
@@ -66,7 +83,7 @@ export function LoginScreen() {
           onError={() => {}}
         />
         <Text style={{ fontSize: typography.fontSizes.lg, fontWeight: typography.fontWeights.bold, color: colors.textPrimary, letterSpacing: 1 }}>
-          Logia Enrique Howard
+          Logia Almirante Howard
         </Text>
         <Text style={{ fontSize: typography.fontSizes.sm, color: colors.textSecondary, letterSpacing: 2 }}>
           Nº 67 · Jujuy
@@ -81,7 +98,7 @@ export function LoginScreen() {
         label="Email"
         placeholder="tu@email.com"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(t) => { setEmail(t); setLoginError(""); }}
         keyboardType="email-address"
         autoCapitalize="none"
         autoComplete="email"
@@ -92,12 +109,32 @@ export function LoginScreen() {
         label="Contraseña"
         placeholder="••••••••"
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(t) => { setPassword(t); setLoginError(""); }}
         secureTextEntry
         secureToggle
-        autoComplete="password"
+        autoComplete="off"
         error={errors.password}
       />
+
+      {/* Error de login inline — no borra los campos */}
+      {loginError ? (
+        <View style={{
+          backgroundColor: "#FEF2F2",
+          borderRadius: 10,
+          padding: spacing.md,
+          marginBottom: spacing.md,
+          borderLeftWidth: 3,
+          borderLeftColor: "#EF4444",
+          flexDirection: "row",
+          alignItems: "flex-start",
+          gap: spacing.xs,
+        }}>
+          <Text style={{ fontSize: 14 }}>⚠️</Text>
+          <Text style={{ flex: 1, fontSize: typography.fontSizes.sm, color: "#B91C1C", lineHeight: 18 }}>
+            {loginError}
+          </Text>
+        </View>
+      ) : null}
 
       <TouchableOpacity
         onPress={() => navigation.navigate("ForgotPassword")}
@@ -111,7 +148,7 @@ export function LoginScreen() {
       <Button
         title="Iniciar sesión"
         onPress={handleLogin}
-        loading={isLoading}
+        loading={loading}
         fullWidth
         size="lg"
       />

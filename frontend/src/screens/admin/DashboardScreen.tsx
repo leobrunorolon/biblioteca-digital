@@ -209,7 +209,7 @@ export function DashboardScreen() {
         {actions.map((action) => (
           <TouchableOpacity
             key={action.screen}
-            onPress={() => navigation.navigate(action.screen)}
+            onPress={() => navigation.navigate(action.screen as any)}
             activeOpacity={0.8}
             style={{
               width: "47%",

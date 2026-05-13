@@ -75,6 +75,44 @@ export function HomeScreen() {
         </Text>
       </View>
 
+      {/* Banner sin tier — solo visible si el usuario no tiene nivel asignado */}
+      {user && !user.tier && (
+        <View style={{
+          marginHorizontal: spacing.xl,
+          marginBottom: spacing.lg,
+          backgroundColor: "#FEF3C7",
+          borderRadius: 16,
+          padding: spacing.lg,
+          borderLeftWidth: 4,
+          borderLeftColor: "#F59E0B",
+        }}>
+          <Text style={{
+            fontSize: typography.fontSizes.base,
+            fontWeight: "700",
+            color: "#92400E",
+            marginBottom: 4,
+          }}>
+            ⏳ Sin acceso al contenido
+          </Text>
+          <Text style={{
+            fontSize: typography.fontSizes.sm,
+            color: "#92400E",
+            lineHeight: 20,
+            marginBottom: spacing.sm,
+          }}>
+            Tu cuenta fue creada pero todavía no tenés permisos asignados.
+            Contactá al administrador de la logia para que te habilite el acceso.
+          </Text>
+          <Text style={{
+            fontSize: typography.fontSizes.xs,
+            color: "#B45309",
+            fontWeight: "600",
+          }}>
+            📧 {user.email}
+          </Text>
+        </View>
+      )}
+
       {/* Anuncios */}
       <AnnouncementBanner />
 
